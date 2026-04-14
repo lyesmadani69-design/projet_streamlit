@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import locale
 from pathlib import Path
 
 import numpy as np
@@ -8,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+locale.setlocale(locale.LC_TIME, "fr_FR.UTF-8")
 try:
     from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
@@ -104,6 +106,7 @@ def compute_ca_line(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 def compute_margin_line(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
@@ -112,13 +115,16 @@ def compute_margin_line(df: pd.DataFrame) -> pd.DataFrame:
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
     if all(col in df.columns for col in ["quantite", "prix_unitaire", "cout_unitaire"]):
-        df["cout_total_ligne"] = df["quantite"].fillna(0) * df["cout_unitaire"].fillna(0)
+        df["cout_total_ligne"] = df["quantite"].fillna(0) * df["cout_unitaire"].fillna(
+            0
+        )
         df["marge_ligne"] = df["ca_ligne"].fillna(0) - df["cout_total_ligne"].fillna(0)
     else:
         df["cout_total_ligne"] = np.nan
         df["marge_ligne"] = np.nan
 
     return df
+
 
 def pareto_table(series: pd.Series, top_n: int = 20) -> pd.DataFrame:
     s = series.dropna().sort_values(ascending=False).head(top_n)
@@ -221,7 +227,9 @@ def detect_granularity(df: pd.DataFrame, ticket_col: str | None) -> dict:
     }
 
 
-def build_daily_series(df: pd.DataFrame, date_col: str = "date_vente") -> pd.Series | None:
+def build_daily_series(
+    df: pd.DataFrame, date_col: str = "date_vente"
+) -> pd.Series | None:
     if date_col not in df.columns or "ca_ligne" not in df.columns:
         return None
 
@@ -329,7 +337,9 @@ def interpret_generalization(metrics: dict) -> dict:
         }
 
 
-def validate_holt_winters(series: pd.Series, test_size: int = 14, seasonal_periods: int = 7):
+def validate_holt_winters(
+    series: pd.Series, test_size: int = 14, seasonal_periods: int = 7
+):
     if not STATSMODELS_OK:
         return None, "statsmodels n'est pas installé."
 
@@ -385,7 +395,9 @@ def build_commercial_insights(
     risks = []
 
     if "ca_ligne" not in df.columns or df["ca_ligne"].dropna().empty:
-        return [], ["Impossible de produire des insights commerciaux : chiffre d’affaires indisponible."]
+        return [], [
+            "Impossible de produire des insights commerciaux : chiffre d’affaires indisponible."
+        ]
 
     # 1. Produit n°1 en CA
     if prod_col and prod_col in df.columns:
@@ -417,22 +429,26 @@ def build_commercial_insights(
             .reset_index()
         )
 
-        perf["taux_marge"] = np.where(perf["ca"] > 0, perf["marge"] / perf["ca"], np.nan)
+        perf["taux_marge"] = np.where(
+            perf["ca"] > 0, perf["marge"] / perf["ca"], np.nan
+        )
 
         best_margin = perf.sort_values("marge", ascending=False).iloc[0]
         low_margin = perf.sort_values("taux_marge", ascending=True).iloc[0]
-        hidden = perf.sort_values(["taux_marge", "marge"], ascending=[False, False]).iloc[0]
+        hidden = perf.sort_values(
+            ["taux_marge", "marge"], ascending=[False, False]
+        ).iloc[0]
 
         insights.append(
             f"📈 Le produit le plus rentable en marge est **{best_margin[prod_col]}** avec **{euro(best_margin['marge'])}**."
         )
 
         insights.append(
-            f"🎯 Le produit à fort potentiel à mettre davantage en avant semble être **{hidden[prod_col]}**."
+            f"🔥 Opportunité : le produit **{hidden[prod_col]}** a un fort potentiel. Le mettre davantage en avant peut augmenter votre chiffre d’affaires."
         )
 
         risks.append(
-            f"⚠️ Le produit le moins rentable en taux de marge est **{low_margin[prod_col]}**. Il mérite d’être revu ou moins poussé."
+            f"⚠️ Le produit le moins rentable en taux de marge est **{low_margin[prod_col]}**. Il doit être optimisé ou moins mis en avant."
         )
 
     # 3. Panier moyen uniquement si ticket fiable
@@ -455,13 +471,17 @@ def build_commercial_insights(
 
     # 4. Heure rentable uniquement si vraie heure exploitable
     if "heure_num" in df.columns and df["heure_num"].dropna().nunique() > 1:
-        metric_col = "marge_ligne" if "marge_ligne" in df.columns and df["marge_ligne"].notna().any() else "ca_ligne"
+        metric_col = (
+            "marge_ligne"
+            if "marge_ligne" in df.columns and df["marge_ligne"].notna().any()
+            else "ca_ligne"
+        )
         by_hour = df.groupby("heure_num")[metric_col].sum().sort_values(ascending=False)
 
         if not by_hour.empty:
             best_hour = int(by_hour.index[0])
             insights.append(
-                f"⏰ Le créneau le plus performant semble être **{best_hour}h**. C’est un horaire à exploiter commercialement."
+                f"⏰ Le créneau le plus performant semble être **{best_hour}h**. C’est à cette heure qu’il faut maximiser vos ventes."
             )
 
     # 5. Paiement principal
@@ -489,12 +509,19 @@ def build_commercial_insights(
 
     return insights, risks
 
-   
 
-
-
-def simulate_gain(df: pd.DataFrame, ticket_col: str | None, date_col: str | None, uplift_panier: float = 1.0):
-    if not ticket_col or ticket_col not in df.columns or not date_col or date_col not in df.columns:
+def simulate_gain(
+    df: pd.DataFrame,
+    ticket_col: str | None,
+    date_col: str | None,
+    uplift_panier: float = 1.0,
+):
+    if (
+        not ticket_col
+        or ticket_col not in df.columns
+        or not date_col
+        or date_col not in df.columns
+    ):
         return {"gain_journalier": None, "gain_mensuel": None, "gain_annuel": None}
 
     n_rows = len(df)
@@ -519,6 +546,8 @@ def simulate_gain(df: pd.DataFrame, ticket_col: str | None, date_col: str | None
         "gain_mensuel": gain_mensuel,
         "gain_annuel": gain_annuel,
     }
+
+
 # =========================================================
 # CHARGEMENT / SOURCE
 # =========================================================
@@ -526,9 +555,9 @@ def simulate_gain(df: pd.DataFrame, ticket_col: str | None, date_col: str | None
 # =========================================================
 # CHARGEMENT / SOURCE
 # =========================================================
-data_path = Path(r"C:\Users\lyesm\OneDrive\Desktop\ventes_60j.csv")
+data_path = Path("ventes_60j.xlsx")
 
-df = pd.read_csv(data_path)
+df = pd.read_excel(data_path)
 summary = {}
 
 DATE_COL = "date_vente" if "date_vente" in df.columns else None
@@ -540,8 +569,7 @@ PAY_COL = "moyen_paiement" if "moyen_paiement" in df.columns else None
 
 if DATE_COL and TIME_COL:
     df["datetime"] = pd.to_datetime(
-        df[DATE_COL].astype(str) + " " + df[TIME_COL].astype(str),
-        errors="coerce"
+        df[DATE_COL].astype(str) + " " + df[TIME_COL].astype(str), errors="coerce"
     )
     df[DATE_COL] = df["datetime"]
     df["heure_num"] = df["datetime"].dt.hour
@@ -553,34 +581,20 @@ df = compute_ca_line(df)
 df = compute_margin_line(df)
 
 granularity = detect_granularity(df, TICKET_COL)
-# =========================================================
-# HERO
-# =========================================================
-st.markdown(
-    """
-    <div class="hero-box">
-        <div class="main-title">Augmentez votre chiffre d’affaires grâce à vos données 📊</div>
-        <div class="subtitle">
-            Ce tableau de bord transforme un simple export de caisse en décisions concrètes :
-            produits à pousser, heures fortes, opportunités de vente, et estimation de fiabilité des prévisions.
-        </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+
 
 # =========================================================
 # FILTRES
 # =========================================================
 with st.sidebar:
-    st.header("🔎 Filtres")
+    st.header("🔎 Filtres d'analyse")
     df_f = df.copy()
 
     if DATE_COL and df_f[DATE_COL].notna().any():
         dmin = df_f[DATE_COL].min().date()
         dmax = df_f[DATE_COL].max().date()
         date_range = st.date_input(
-            "Période",
+            "Période d'analyse",
             value=(dmin, dmax),
             min_value=dmin,
             max_value=dmax,
@@ -588,19 +602,22 @@ with st.sidebar:
         if isinstance(date_range, tuple) and len(date_range) == 2:
             start, end = date_range
             df_f = df_f[
-                (df_f[DATE_COL].dt.date >= start)
-                & (df_f[DATE_COL].dt.date <= end)
+                (df_f[DATE_COL].dt.date >= start) & (df_f[DATE_COL].dt.date <= end)
             ]
 
     if CAT_COL:
         cats = sorted(df_f[CAT_COL].dropna().astype(str).unique().tolist())
-        selected_cats = st.multiselect("Catégories", options=cats, default=cats)
+        selected_cats = st.multiselect(
+            "Catégories de produits", options=cats, default=cats
+        )
         if selected_cats:
             df_f = df_f[df_f[CAT_COL].astype(str).isin(selected_cats)]
 
     if PAY_COL:
         pays = sorted(df_f[PAY_COL].dropna().astype(str).unique().tolist())
-        selected_pay = st.multiselect("Modes de paiement", options=pays, default=pays)
+        selected_pay = st.multiselect(
+            "Modes de paiement utilisés", options=pays, default=pays
+        )
         if selected_pay:
             df_f = df_f[df_f[PAY_COL].astype(str).isin(selected_pay)]
 
@@ -614,7 +631,9 @@ if DATE_COL and "ca_ligne" in df_f.columns:
 # =========================================================
 nb_rows = len(df_f)
 nb_tickets = int(df_f[TICKET_COL].nunique(dropna=True)) if TICKET_COL else None
-ca_total = float(df_f["ca_ligne"].dropna().sum()) if "ca_ligne" in df_f.columns else None
+ca_total = (
+    float(df_f["ca_ligne"].dropna().sum()) if "ca_ligne" in df_f.columns else None
+)
 panier_moyen = (
     ca_total / nb_tickets
     if (
@@ -637,14 +656,17 @@ taux_marge = (
 )
 
 k1, k2, k3, k4, k5 = st.columns(5)
-k1.metric("Lignes", f"{nb_rows:,}".replace(",", " "))
-k2.metric("Tickets", f"{nb_tickets:,}".replace(",", " ") if nb_tickets is not None else "N/A")
-k3.metric("CA total", euro(ca_total))
+k1.metric("Lignes de vente", f"{nb_rows:,}".replace(",", " "))
+k2.metric(
+    "Nombre de tickets",
+    f"{nb_tickets:,}".replace(",", " ") if nb_tickets is not None else "N/A",
+)
+k3.metric("Chiffre d’affaires total", euro(ca_total))
 if granularity["ticket_reliable"]:
-    k4.metric("Panier moyen", euro(panier_moyen))
+    k4.metric("Panier moyen par client", euro(panier_moyen))
 else:
     k4.metric("Panier moyen", "⚠️ Donnée non exploitable")
-k5.metric("Taux de marge", pct(taux_marge))
+k5.metric("Taux de marge (%)", pct(taux_marge))
 
 if DATE_COL and df_f[DATE_COL].notna().any():
     dmin = df_f[DATE_COL].min()
@@ -654,21 +676,36 @@ if DATE_COL and df_f[DATE_COL].notna().any():
 # =========================================================
 # INSIGHTS COMMERCIAUX
 # =========================================================
-insights, risks = build_commercial_insights(df_f, DATE_COL, TICKET_COL, PROD_COL, CAT_COL, PAY_COL)
+insights, risks = build_commercial_insights(
+    df_f, DATE_COL, TICKET_COL, PROD_COL, CAT_COL, PAY_COL
+)
 
 left, right = st.columns([1.5, 1])
-
 with left:
-    st.subheader("Ce que vos données racontent")
+    st.subheader("📊 Analyse de performance commerciale")
+    st.caption(
+        "Ces informations vous montrent clairement où se situe votre rentabilité et vos opportunités de croissance."
+    )
+
     for item in insights:
         st.markdown(f'<div class="insight-box">{item}</div>', unsafe_allow_html=True)
 
     for item in risks:
         st.markdown(f'<div class="risk-box">{item}</div>', unsafe_allow_html=True)
 
+    st.subheader("Actions recommandées")
+    st.markdown(
+        """
+    - 💡 Mettre davantage en avant les produits à forte marge
+    - 📈 Travailler les ventes aux heures les plus rentables
+    - 🧾 Augmenter le panier moyen avec des offres simples (boisson, dessert, menu)
+    - ⚠️ Réduire ou optimiser les produits les moins rentables
+    """
+    )
+
 with right:
     st.markdown('<div class="cta-box">', unsafe_allow_html=True)
-    st.subheader("Simulation de gain")
+    st.subheader("Impact direct sur votre chiffre d’affaires")
     uplift = st.slider("Hausse du panier moyen simulée (€)", 0.5, 5.0, 1.0, 0.5)
     sim = simulate_gain(df_f, TICKET_COL, DATE_COL, uplift_panier=uplift)
 
@@ -677,27 +714,45 @@ with right:
     st.metric("Gain annuel estimé", euro(sim["gain_annuel"]))
 
     st.caption(
-        "Hypothèse simple : même volume de tickets, panier moyen légèrement plus élevé."
+        "Estimation basée sur votre activité actuelle et une augmentation du panier moyen."
     )
-    st.markdown('</div>', unsafe_allow_html=True)
 
-ratio_text = f"{granularity['ratio']:.2f}" if granularity["ratio"] is not None else "N/A"
+    st.markdown("</div>", unsafe_allow_html=True)
 
 if granularity["ticket_reliable"]:
     st.success(
-        f"Granularité détectée : **{granularity['level']}** — "
-        f"{granularity['interpretation']} "
-        f"(ratio lignes / ticket : **{ratio_text}**)."
+        "✅ Vos données sont fiables et permettent une analyse commerciale exploitable."
     )
 else:
     st.warning(
-        f"Granularité détectée : **{granularity['level']}** — "
-        f"{granularity['interpretation']} "
-        f"(ratio lignes / ticket : **{ratio_text}**)."
+        "Vos données contiennent une incohérence structurelle. Certains indicateurs transactionnels sont volontairement désactivés pour éviter une mauvaise interprétation."
     )
+# =========================================================
+# HERO
+# =========================================================
 
+st.markdown("---")
 
-
+st.markdown(
+    """
+    <div class="cta-box">
+        <h3 style="margin-top:0;">Passez de l’analyse à l’action</h3>
+        <p>
+            Ce tableau de bord montre comment vos données peuvent révéler des leviers concrets :
+            produits à pousser, créneaux forts, panier moyen à augmenter et points faibles à corriger.
+        </p>
+        <p>
+            <strong>Vous voulez la même analyse sur vos propres ventes ?</strong><br>
+            Je peux transformer vos exports de caisse en décisions simples, claires et rentables.
+        </p>
+        <p style="margin-bottom:0;">
+            📲 <strong>Contactez-moi sur WhatsApp</strong><br>
+            📎 <strong>Consultez mon portfolio Streamlit</strong>
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 # =========================================================
 # TABS
 # =========================================================
@@ -710,53 +765,79 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(
         "🧾 Données",
     ]
 )
-
+# =========================================================
+# TRADUCTION JOURS FR
+# =========================================================
+jours_fr = {
+    "Monday": "Lundi",
+    "Tuesday": "Mardi",
+    "Wednesday": "Mercredi",
+    "Thursday": "Jeudi",
+    "Friday": "Vendredi",
+    "Saturday": "Samedi",
+    "Sunday": "Dimanche",
+}
 # =========================================================
 # TAB 1 - ACTIVITE
 # =========================================================
 with tab1:
-    c1, c2 = st.columns(2)
+    st.subheader("⏰ À quelles heures vous gagnez le plus")
 
-    with c1:
-        st.subheader("CA journalier")
-        if DATE_COL and "ca_ligne" in df_f.columns and df_f[DATE_COL].notna().any():
-            daily = (
-                df_f.dropna(subset=[DATE_COL])
-                .groupby(df_f[DATE_COL].dt.date)["ca_ligne"]
-                .sum()
-                .reset_index()
-            )
-            daily.columns = ["date", "ca"]
-            daily["tendance_7j"] = daily["ca"].rolling(7).mean()
+    if (
+        "heure_num" in df_f.columns
+        and "ca_ligne" in df_f.columns
+        and df_f["heure_num"].notna().any()
+    ):
+        hourly = (
+            df_f.groupby("heure_num", dropna=False)["ca_ligne"]
+            .sum()
+            .reset_index()
+            .sort_values("heure_num")
+        )
 
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=daily["date"], y=daily["ca"], mode="lines+markers", name="CA"))
-            fig.add_trace(
-                go.Scatter(
-                    x=daily["date"],
-                    y=daily["tendance_7j"],
-                    mode="lines",
-                    name="Tendance 7j",
-                    line=dict(dash="dash"),
-                )
-            )
-            fig.update_layout(height=420, xaxis_title="Date", yaxis_title="CA")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Impossible de tracer le CA journalier.")
+        fig_hour = px.bar(hourly, x="heure_num", y="ca_ligne")
+        fig_hour.update_layout(height=420, xaxis_title="Heure", yaxis_title="CA")
+        st.plotly_chart(fig_hour, use_container_width=True)
 
-    with c2:
-        st.subheader("CA mensuel")
-        if DATE_COL and "ca_ligne" in df_f.columns and df_f[DATE_COL].notna().any():
-            tmp = df_f.dropna(subset=[DATE_COL]).copy()
-            tmp["month"] = tmp[DATE_COL].dt.to_period("M").astype(str)
-            monthly = tmp.groupby("month")["ca_ligne"].sum().reset_index()
-            fig = px.bar(monthly, x="month", y="ca_ligne")
-            fig.update_layout(height=420, xaxis_title="Mois", yaxis_title="CA")
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Impossible de tracer le CA mensuel.")
+        best_hour_row = hourly.sort_values("ca_ligne", ascending=False).iloc[0]
+        best_hour = int(best_hour_row["heure_num"])
+        best_hour_ca = best_hour_row["ca_ligne"]
 
+        st.success(
+            f"🔥 Votre heure la plus rentable est **{best_hour}h** avec **{euro(best_hour_ca)}** de chiffre d’affaires cumulé."
+        )
+    else:
+        st.info("Impossible d’analyser les heures rentables.")
+
+    st.divider()
+
+    st.subheader("📅 Quels jours fonctionnent le mieux")
+
+    if DATE_COL and "ca_ligne" in df_f.columns and df_f[DATE_COL].notna().any():
+        tmp = df_f.dropna(subset=[DATE_COL]).copy()
+        tmp["jour_num"] = tmp[DATE_COL].dt.dayofweek
+        tmp["jour"] = tmp[DATE_COL].dt.day_name().replace(jours_fr)
+
+        weekly = (
+            tmp.groupby(["jour_num", "jour"], dropna=False)["ca_ligne"]
+            .sum()
+            .reset_index()
+            .sort_values("jour_num")
+        )
+
+        fig_week = px.bar(weekly, x="jour", y="ca_ligne")
+        fig_week.update_layout(height=420, xaxis_title="Jour", yaxis_title="CA")
+        st.plotly_chart(fig_week, use_container_width=True)
+
+        best_day_row = weekly.sort_values("ca_ligne", ascending=False).iloc[0]
+        best_day = best_day_row["jour"]
+        best_day_ca = best_day_row["ca_ligne"]
+
+        st.success(
+            f"📈 Le jour le plus performant est **{best_day}** avec **{euro(best_day_ca)}** de chiffre d’affaires cumulé."
+        )
+    else:
+        st.info("Impossible d’analyser les jours les plus rentables.")
 # =========================================================
 # TAB 2 - PRODUITS
 # =========================================================
@@ -788,7 +869,9 @@ with tab2:
                 height=450,
                 xaxis_title="Produit",
                 yaxis_title="CA",
-                yaxis2=dict(title="% cumulé", overlaying="y", side="right", range=[0, 100]),
+                yaxis2=dict(
+                    title="% cumulé", overlaying="y", side="right", range=[0, 100]
+                ),
             )
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(ptab, use_container_width=True)
@@ -820,7 +903,9 @@ with tab2:
                 height=450,
                 xaxis_title="Catégorie",
                 yaxis_title="CA",
-                yaxis2=dict(title="% cumulé", overlaying="y", side="right", range=[0, 100]),
+                yaxis2=dict(
+                    title="% cumulé", overlaying="y", side="right", range=[0, 100]
+                ),
             )
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(ctab, use_container_width=True)
@@ -885,7 +970,9 @@ with tab4:
     )
 
     if daily_series is None or len(daily_series) < 30:
-        st.warning("Pas assez de données journalières pour tester sérieusement une prévision.")
+        st.warning(
+            "Pas assez de données journalières pour tester sérieusement une prévision."
+        )
     else:
         st.write(f"Nombre de jours disponibles : **{len(daily_series)}**")
 
@@ -893,7 +980,9 @@ with tab4:
         with c1:
             test_size = st.slider("Taille de la période test (jours)", 7, 21, 14, 1)
         with c2:
-            seasonal_periods = st.selectbox("Saisonnalité hebdomadaire", options=[7], index=0)
+            seasonal_periods = st.selectbox(
+                "Saisonnalité hebdomadaire", options=[7], index=0
+            )
 
         validation_result, validation_error = validate_holt_winters(
             daily_series,
@@ -902,13 +991,18 @@ with tab4:
         )
 
         # Historique brut
-        hist_df = pd.DataFrame(
-            {"date": daily_series.index, "ca": daily_series.values}
-        )
+        hist_df = pd.DataFrame({"date": daily_series.index, "ca": daily_series.values})
         hist_df["tendance_7j"] = hist_df["ca"].rolling(7).mean()
 
         fig_hist = go.Figure()
-        fig_hist.add_trace(go.Scatter(x=hist_df["date"], y=hist_df["ca"], mode="lines+markers", name="Historique"))
+        fig_hist.add_trace(
+            go.Scatter(
+                x=hist_df["date"],
+                y=hist_df["ca"],
+                mode="lines+markers",
+                name="Historique",
+            )
+        )
         fig_hist.add_trace(
             go.Scatter(
                 x=hist_df["date"],
@@ -931,19 +1025,14 @@ with tab4:
             interp = validation_result["interpretation"]
             reliability = validation_result["reliability"]
 
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("MAE", f"{metrics['mae']:.2f}")
-            m2.metric("RMSE", f"{metrics['rmse']:.2f}")
-            m3.metric("MAPE", f"{metrics['mape']:.2f} %")
-            m4.metric(
-                "Fiabilité estimée",
-                f"{reliability['score_pct']:.1f} %" if reliability["score_pct"] is not None else "N/A",
+            st.metric(
+                "Fiabilité estimée de la prévision",
+                (
+                    f"{reliability['score_pct']:.1f} %"
+                    if reliability["score_pct"] is not None
+                    else "N/A"
+                ),
             )
-
-            p1, p2, p3 = st.columns(3)
-            p1.metric("Alpha", f"{validation_result['alpha']:.3f}" if validation_result["alpha"] is not None else "N/A")
-            p2.metric("Beta", f"{validation_result['beta']:.3f}" if validation_result["beta"] is not None else "N/A")
-            p3.metric("Gamma", f"{validation_result['gamma']:.3f}" if validation_result["gamma"] is not None else "N/A")
 
             st.write(f"Période train : **{len(train)} jours**")
             st.write(f"Période test : **{len(test)} jours**")
@@ -968,7 +1057,9 @@ with tab4:
             compare_df = pd.DataFrame(
                 {
                     "date": list(train.index) + list(test.index) + list(pred.index),
-                    "valeur": list(train.values) + list(test.values) + list(pred.values),
+                    "valeur": list(train.values)
+                    + list(test.values)
+                    + list(pred.values),
                     "serie": (
                         ["Train"] * len(train)
                         + ["Test réel"] * len(test)
@@ -1004,7 +1095,9 @@ with tab4:
                     "La prévision peut être utilisée pour illustrer une tendance crédible. "
                     "C’est utile pour anticiper l’activité et mieux préparer les décisions commerciales."
                 )
-            elif reliability["score_pct"] is not None and reliability["score_pct"] >= 70:
+            elif (
+                reliability["score_pct"] is not None and reliability["score_pct"] >= 70
+            ):
                 st.info(
                     "La prévision donne une tendance exploitable, mais doit être présentée avec prudence."
                 )
