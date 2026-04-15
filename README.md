@@ -8,11 +8,11 @@ J’aide les commerces à transformer leurs données en chiffre d’affaires.
 
 Bar, tabac, restaurant, salon de beauté, commerce de proximité…
 
-👉 Vos problématiques sont les mêmes :
-- Données mal exploitées
-- Aucune vision claire de la rentabilité
-- Décisions prises “au feeling”
+👉 Des situations que je rencontre souvent :
 
+- Données difficiles à exploiter  
+- Manque de visibilité sur la rentabilité  
+- Décisions prises avec peu d’indicateurs fiables  
 ---
 
 ## 📊 Mon approche
