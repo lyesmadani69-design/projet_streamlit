@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import locale
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +8,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-locale.setlocale(locale.LC_TIME, "fr_FR.UTF-8")
 try:
     from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
